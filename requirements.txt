@@ -1,0 +1,5 @@
+discord.py
+stripe
+flask
+python-dotenv
+gunicorn
