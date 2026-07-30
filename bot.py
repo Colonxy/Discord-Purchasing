@@ -11,12 +11,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+stripe.api_key = os.getenv(
+    "STRIPE_SECRET_KEY"
+)
 
 
-# -----------------------------
+# =========================
 # Discord setup
-# -----------------------------
+# =========================
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -29,9 +31,10 @@ bot = commands.Bot(
 )
 
 
-# -----------------------------
+
+# =========================
 # Stripe webhook
-# -----------------------------
+# =========================
 
 app = Flask(__name__)
 
@@ -41,12 +44,16 @@ def webhook():
 
     event = request.json
 
-    print("Stripe event:", event["type"])
+    print(
+        "Stripe event:",
+        event["type"]
+    )
 
 
     if event["type"] == "checkout.session.completed":
 
         session = event["data"]["object"]
+
 
         discord_id = int(
             session["metadata"]["discord_id"]
@@ -97,29 +104,27 @@ async def give_role(discord_id, product):
 
 
 
-    if product == "Lifetime Access":
+    roles = {
 
-        role_id = os.getenv(
-            "LIFETIME_ROLE_ID"
-        )
+        "Lifetime Access":
+        os.getenv("LIFETIME_ROLE_ID"),
 
+        "Monthly Access":
+        os.getenv("MONTH_ROLE_ID"),
 
-    elif product == "Monthly Access":
+        "Weekly Access":
+        os.getenv("WEEK_ROLE_ID"),
 
-        role_id = os.getenv(
-            "MONTH_ROLE_ID"
-        )
-
-
-    elif product == "Weekly Access":
-
-        role_id = os.getenv(
-            "WEEK_ROLE_ID"
-        )
+        "Test Purchase":
+        os.getenv("TEST_ROLE_ID")
+    }
 
 
-    else:
-        print("Unknown product")
+    role_id = roles.get(product)
+
+
+    if not role_id:
+        print("No role for product")
         return
 
 
@@ -131,7 +136,9 @@ async def give_role(discord_id, product):
 
     if role:
 
-        await member.add_roles(role)
+        await member.add_roles(
+            role
+        )
 
         print(
             "Added role:",
@@ -140,11 +147,11 @@ async def give_role(discord_id, product):
 
 
 
-# -----------------------------
-# Purchase buttons
-# -----------------------------
+# =========================
+# Stripe payment creator
+# =========================
 
-class PurchaseButton(discord.ui.View):
+class PurchaseView(discord.ui.View):
 
     def __init__(self):
 
@@ -157,9 +164,8 @@ class PurchaseButton(discord.ui.View):
         self,
         interaction,
         price_id,
-        product_name
+        product
     ):
-
 
         await interaction.response.defer(
             ephemeral=True
@@ -171,10 +177,12 @@ class PurchaseButton(discord.ui.View):
             session = stripe.checkout.Session.create(
 
                 line_items=[
+
                     {
                         "price": price_id,
                         "quantity": 1
                     }
+
                 ],
 
                 mode="payment",
@@ -185,44 +193,56 @@ class PurchaseButton(discord.ui.View):
                 cancel_url=
                 "https://example.com/cancel",
 
+
                 metadata={
 
                     "discord_id":
                     str(interaction.user.id),
 
                     "product":
-                    product_name
+                    product
+
                 }
+
             )
 
 
             await interaction.followup.send(
 
-                f"✅ Pay here:\n{session.url}",
+                f"💳 Payment link:\n{session.url}",
 
                 ephemeral=True
+
             )
 
 
         except Exception as e:
 
-            print("STRIPE ERROR:")
+            print(
+                "STRIPE ERROR:"
+            )
+
             print(e)
 
 
             await interaction.followup.send(
 
-                "❌ Failed creating payment link.",
+                "❌ Payment creation failed.",
 
                 ephemeral=True
+
             )
 
 
 
     @discord.ui.button(
+
         label="Lifetime",
-        style=discord.ButtonStyle.green,
+
+        style=discord.ButtonStyle.gray,
+
         custom_id="lifetime_button"
+
     )
     async def lifetime(
         self,
@@ -239,14 +259,19 @@ class PurchaseButton(discord.ui.View):
             ),
 
             "Lifetime Access"
+
         )
 
 
 
     @discord.ui.button(
+
         label="Month",
-        style=discord.ButtonStyle.blurple,
+
+        style=discord.ButtonStyle.gray,
+
         custom_id="month_button"
+
     )
     async def month(
         self,
@@ -263,14 +288,19 @@ class PurchaseButton(discord.ui.View):
             ),
 
             "Monthly Access"
+
         )
 
 
 
     @discord.ui.button(
+
         label="Week",
+
         style=discord.ButtonStyle.gray,
+
         custom_id="week_button"
+
     )
     async def week(
         self,
@@ -287,41 +317,115 @@ class PurchaseButton(discord.ui.View):
             ),
 
             "Weekly Access"
+
         )
 
 
 
-# -----------------------------
-# Bot events
-# -----------------------------
+# =========================
+# Test purchase button
+# =========================
 
-@bot.event
-async def on_ready():
+class TestView(discord.ui.View):
 
-    print(
-        f"Logged in as {bot.user}"
+    def __init__(self):
+
+        super().__init__(
+            timeout=None
+        )
+
+
+    @discord.ui.button(
+
+        label="Test Purchase",
+
+        style=discord.ButtonStyle.gray,
+
+        custom_id="test_purchase_button"
+
     )
+    async def test(
+
+        self,
+
+        interaction,
+
+        button
+
+    ):
+
+        await interaction.response.defer(
+            ephemeral=True
+        )
 
 
-    bot.add_view(
-        PurchaseButton()
-    )
+        session = stripe.checkout.Session.create(
+
+            line_items=[
+
+                {
+
+                    "price":
+                    os.getenv("TEST_PRICE_ID"),
+
+                    "quantity": 1
+
+                }
+
+            ],
 
 
+            mode="payment",
+
+
+            success_url=
+            "https://example.com/success",
+
+
+            cancel_url=
+            "https://example.com/cancel",
+
+
+            metadata={
+
+                "discord_id":
+                str(interaction.user.id),
+
+
+                "product":
+                "Test Purchase"
+
+            }
+
+        )
+
+
+        await interaction.followup.send(
+
+            session.url,
+
+            ephemeral=True
+
+        )
+
+
+
+# =========================
+# Discord commands
+# =========================
 
 @bot.command()
 async def shop(ctx):
-
 
     embed = discord.Embed(
 
         title="⭐ Instant Access",
 
         description=
-        "Purchase below for instant access!\n\n"
-        "Choose your plan:",
+        "Purchase below for instant access!",
 
-        color=0x00ff00
+        colour=0xF2F3F5
+
     )
 
 
@@ -332,6 +436,7 @@ async def shop(ctx):
         value="Permanent access",
 
         inline=False
+
     )
 
 
@@ -342,6 +447,7 @@ async def shop(ctx):
         value="30 days access",
 
         inline=False
+
     )
 
 
@@ -352,12 +458,6 @@ async def shop(ctx):
         value="7 days access",
 
         inline=False
-    )
-
-
-    embed.set_footer(
-
-        text="Payments securely handled by Stripe"
 
     )
 
@@ -366,15 +466,59 @@ async def shop(ctx):
 
         embed=embed,
 
-        view=PurchaseButton()
+        view=PurchaseView()
 
     )
 
 
 
-# -----------------------------
-# Start webhook server
-# -----------------------------
+@bot.command()
+async def test(ctx):
+
+    embed = discord.Embed(
+
+        title="🧪 Test Purchase",
+
+        description=
+        "Testing Stripe + webhook + role system.",
+
+        colour=0xF2F3F5
+
+    )
+
+
+    await ctx.send(
+
+        embed=embed,
+
+        view=TestView()
+
+    )
+
+
+
+# =========================
+# Startup
+# =========================
+
+@bot.event
+async def on_ready():
+
+    print(
+        f"Logged in as {bot.user}"
+    )
+
+
+    bot.add_view(
+        PurchaseView()
+    )
+
+
+    bot.add_view(
+        TestView()
+    )
+
+
 
 def run_webhook():
 
@@ -397,10 +541,6 @@ threading.Thread(
 ).start()
 
 
-
-# -----------------------------
-# Start bot
-# -----------------------------
 
 bot.run(
     os.getenv("DISCORD_TOKEN")
